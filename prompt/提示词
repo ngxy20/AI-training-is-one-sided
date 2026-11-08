@@ -1,0 +1,360 @@
+AI Xian — PRD v0.1
+版本：v0.1
+平台：Windows 10/11 桌面端
+主场景：LLM 文本生成项目的训练全生命周期管理
+交付策略：共享底座 + 三模块拆分交付，主体闭源，插件开放
+
+1. 产品定位（最终确认）
+AI Training Studio（中文：AI 训练工作台） 是一款 Windows 桌面端、本地优先、项目制、IDE 式 的 AI 训练项目集成开发与管理工作台，专注 LLM 文本生成 方向。
+
+它连接 现有数据库 与本地/远程算力，覆盖从 数据接入 → 数据收集脚本 → 数据集版本 → 清洗 → 文本标注 → 代码与参数编辑 → 训练任务 → 实验追踪 → A/B 测试 → 能力边界测试 → 准确性评测 → 指标与报告 的完整链路。每个项目独立工作区、独立元数据库、独立资产目录、独立插件启用集，保证可追溯、可复现、可审计。
+
+不做的事： 不内置数据库服务；不重写训练框架；MVP 不做前端 UI 插件；P2 前不做多人协作。
+
+2. 目标用户与核心场景
+目标用户： 个人 AI 工程师 / 小团队算法工程师 / 训练项目负责人。
+核心场景：
+
+从生产库拉数据 → 写收集脚本 → 建数据集 → 清洗 → 标注 → 转训练格式。
+
+在 IDE 内编辑训练脚本与参数 → 提交本地或 SSH/Docker 远程训练 → 追踪实验。
+
+用固定评测集做 A/B、能力边界、准确性测试 → 生成可视化报告 → 归档到项目。
+
+3. 系统架构
+text
+┌──────────────────────────────────────────────────────────────┐
+│  Electron 桌面端（React + TS + Monaco）                        │
+│  资源树 / 多标签编辑器 / 命令面板 / 标注视图 / 报告预览        │
+└───────────────────────────┬──────────────────────────────────┘
+                            │ HTTP + WebSocket (localhost)
+┌───────────────────────────▼──────────────────────────────────┐
+│  Python FastAPI Sidecar（本地核心服务）                        │
+│  Project / DataSource / Dataset / Annotation / Script /        │
+│  Training / Eval / Report / Job / Plugin / Audit               │
+└──────┬──────────────┬──────────────┬──────────────┬──────────┘
+       │              │              │              │
+   SQLAlchemy    文件资产目录      Job Runner      Plugin Loader
+   (外部DB)      (项目 workspace)  (Local/SSH/     (Python 后端
+                                   Docker)        扩展点)
+       │              │              │
+   现有数据库      JSONL/Parquet  本地进程 / SSH 远端 / Docker 容器
+技术栈决策：
+
+层	选型	理由
+桌面壳	Electron	Windows 成熟、IDE 式交互成熟
+前端	React + TypeScript + Monaco	代码/SQL/YAML 编辑与多标签
+本地服务	Python FastAPI + Uvicorn	与训练生态一致，插件天然 Python
+ORM	SQLAlchemy 2.x	多数据库适配
+元数据库	项目级 SQLite	隔离、可迁移、零运维
+任务队列	内置 Job 表 + asyncio 执行器	轻量，后续可换
+远程训练	SSH（paramiko）+ Docker SDK	MVP 优先，K8s/Slurm 留适配器接口
+插件	Python entry points + manifest	主体闭源，扩展开放
+4. 功能范围
+4.1 共享底座（P0）
+项目管理：创建/打开/关闭/归档，多项目隔离，独立 workspace 目录与 SQLite。
+
+资源树：数据源、数据集、清洗 Pipeline、标注任务、脚本、训练配置、实验、评测套件、A/B、报告、插件。
+
+多标签编辑器：代码、SQL、YAML、数据表格、标注视图、实验详情、报告预览。
+
+命令面板（Ctrl+Shift+P）、全局搜索、文件 URI 规范。
+
+任务队列、日志流（WebSocket）、终端、问题面板、审计事件。
+
+资产版本与引用关系图（数据集版本、代码版本、参数、checkpoint、评测集版本）。
+
+可视化组件库：表格、指标卡、图表、报告渲染器。
+
+设置：全局设置 + 项目设置，含环境、连接、插件启用。
+
+4.2 数据模块（P0）
+数据源
+
+连接现有 SQLite / PostgreSQL / MySQL（可扩展驱动）。
+
+连接测试、Schema 浏览、表/字段搜索、SQL 编辑器、结果预览、导出为数据集。
+
+数据收集脚本
+
+Python / SQL 脚本编辑与保存（版本化）。
+
+运行、参数注入、日志、产物落盘到数据集。
+
+定时/手动触发（MVP 手动 + 简单 cron）。
+
+数据集管理
+
+创建、导入（JSONL/CSV/Parquet/目录）、字段映射、统计、预览。
+
+数据集版本：不可变版本 + manifest + 变更说明。
+
+导出：训练格式转换（Alpaca/ShareGPT/自定义模板）。
+
+清洗 Pipeline
+
+节点化规则（去重、过滤、正则、长度、语言、脱敏）+ 自定义 Python 算子。
+
+版本化、可复跑、产物为新数据集版本。
+
+执行日志与统计报告。
+
+文本标注工作台
+
+模板：分类、NER、QA、摘要、生成质量评分、偏好排序、A/B 人工标注。
+
+标签体系管理、标注任务分配（单人/多人池）、审核、一致性统计（Cohen's Kappa）。
+
+标注结果存 SQLite/JSONL，可导出。
+
+4.3 训练模块（P1）
+代码工作区：Python 脚本、YAML/JSON 配置、requirements、环境说明。
+
+环境管理：本地 uv/conda、远程 SSH 环境、Docker 镜像。
+
+参数 Schema：JSON Schema 生成表单 + 直接编辑 YAML，二者双向同步。
+
+训练任务：本地进程 / SSH 远端 / Docker 容器执行；队列、日志、中断、checkpoint 拉取。
+
+实验追踪：参数、数据版本、代码版本、环境、指标、产物、日志全关联。
+
+模型登记：checkpoint、基座模型、备注、可复现实验卡片。
+
+4.4 训后模块（P2）
+A/B 测试：模型版本对比、提示集、自动评分 + 人工评分、胜率统计。
+
+能力边界测试：拒答/越界、幻觉、长上下文、格式约束、多语言、对抗提示；套件版本化、用例管理、批量执行。
+
+准确性测试：规则断言、参考对比、LLM-as-judge、人工复核。
+
+指标看板：准确率、通过率、胜率、一致性、延迟、成本等。
+
+报告：实验报告、评测报告；导出 HTML（优先）、PDF、JSON、Markdown（全部支持）。
+
+报告与数据版本、模型版本、评测集版本强关联。
+
+4.5 协作（P2）
+数据模型预留 owner / role / audit；P2 实现用户、角色、项目共享、任务指派、审核流。
+
+5. 非功能需求
+本地优先：断网可用；数据默认落本地，不外传。
+
+可复现：任何实验/评测/报告可追溯到数据集版本 + 代码版本 + 参数 + 环境 + checkpoint。
+
+性能：10 万条文本数据集预览 < 3s；标注切换 < 200ms；日志流实时。
+
+安全：数据库凭据加密存储（Windows DPAPI）；插件权限声明；审计事件。
+
+可扩展：插件 API 版本化；前端事件/组件协议预留（V2）。
+
+国际化：MVP 中文，预留 i18n。
+
+6. 核心数据模型（SQLite，项目级）
+所有表含 id、created_at、updated_at；资产类含 version、parent_version_id。
+
+Project：id, name, description, workspace_path, status, settings_json
+
+DataSource：id, project_id, name, type(sqlite/pg/mysql), conn_json(加密), status, last_tested_at
+
+Dataset：id, project_id, name, description, schema_json, source_type
+
+DatasetVersion：id, dataset_id, version, manifest_path, record_count, stats_json, created_by_job_id, changelog
+
+Record：id, dataset_version_id, external_id, payload_json, label_json, split(train/val/test), hash
+
+CleaningPipeline：id, project_id, name, nodes_json, version
+
+Script：id, project_id, name, type(py/sql), path, version, params_schema_json
+
+AnnotationSchema：id, project_id, name, template_type, schema_json
+
+AnnotationTask：id, project_id, dataset_version_id, schema_id, assignee, status, stats_json
+
+Annotation：id, task_id, record_id, label_json, annotator, reviewed_by, status
+
+TrainingConfig：id, project_id, name, script_id, params_json, params_schema_json, env_json
+
+Run：id, project_id, config_id, dataset_version_ids_json, code_version, env_snapshot_json, runner_type(local/ssh/docker), status, started_at, finished_at, metrics_json, artifacts_json
+
+Checkpoint：id, run_id, path, step, metrics_json, registered_model_name
+
+EvalSuite：id, project_id, name, type(ab/boundary/accuracy), cases_json, version
+
+EvalRun：id, suite_id, model_ref_json, dataset_version_ids_json, scorer_json, status, metrics_json, report_id
+
+ABTest：id, project_id, model_a_ref, model_b_ref, prompt_set_json, result_json, report_id
+
+Report：id, project_id, type, linked_entities_json, html_path, pdf_path, json_path, md_path
+
+Job：id, project_id, type, payload_json, runner_type, status, log_path, started_at, finished_at, error
+
+Plugin：id, name, version, manifest_json, enabled, permissions_json
+
+AuditEvent：id, project_id, actor, action, entity_type, entity_id, detail_json, at
+
+关系约束：
+
+Run 必须引用至少一个 DatasetVersion 与一个 TrainingConfig。
+
+EvalRun 必须引用 EvalSuite + 模型引用 + 评测集版本。
+
+Report 必须引用其关联实体 ID 列表，禁止孤立报告。
+
+7. 本地服务 API 清单（v0.1）
+基址 http://127.0.0.1:{port}/api/v1；WebSocket /ws 用于日志、任务状态、事件推送。
+
+项目
+GET/POST /projects、GET/PATCH/DELETE /projects/{id}、POST /projects/{id}/open
+
+数据源
+GET/POST /projects/{pid}/datasources、POST /datasources/{id}/test、GET /datasources/{id}/schema、POST /datasources/{id}/query
+
+数据集
+GET/POST /projects/{pid}/datasets、POST /datasets/{id}/versions、GET /datasets/{id}/versions、GET /dataset-versions/{id}/records、POST /dataset-versions/{id}/export
+
+清洗
+GET/POST /projects/{pid}/pipelines、POST /pipelines/{id}/run、GET /pipelines/{id}/runs
+
+脚本
+GET/POST /projects/{pid}/scripts、PUT /scripts/{id}、POST /scripts/{id}/run
+
+标注
+GET/POST /projects/{pid}/annotation-schemas、GET/POST /projects/{pid}/annotation-tasks、GET /annotation-tasks/{id}/records、POST /annotation-tasks/{id}/annotations、POST /annotation-tasks/{id}/review
+
+训练
+GET/POST /projects/{pid}/configs、GET/POST /projects/{pid}/runs、POST /runs/{id}/cancel、GET /runs/{id}/metrics、GET /runs/{id}/artifacts、POST /runs/{id}/register-model
+
+评测
+GET/POST /projects/{pid}/eval-suites、POST /eval-suites/{id}/runs、GET /eval-runs/{id}、POST /ab-tests、GET /ab-tests/{id}
+
+报告
+GET/POST /projects/{pid}/reports、GET /reports/{id}/export?format=html|pdf|json|md
+
+任务/插件/审计
+GET /jobs、GET /jobs/{id}/logs、GET /plugins、POST /plugins/{id}/enable、GET /audit-events
+
+通用：分页 ?page&size；错误统一 {code, message, detail}；鉴权 MVP 本地免登录，预留 token。
+
+8. 插件 SDK 草案（MVP：Python 后端扩展）
+插件包结构
+
+text
+my_plugin/
+  manifest.json
+  plugin.py          # 入口，导出扩展点实现
+  requirements.txt
+manifest.json
+
+json
+{
+  "id": "com.example.mysql-connector",
+  "name": "MySQL Connector",
+  "version": "0.1.0",
+  "sdk_version": "0.1",
+  "app_version": ">=0.1.0 <0.2.0",
+  "permissions": ["datasource:connect", "network:outbound"],
+  "extension_points": [
+    { "point": "data_source", "impl": "plugin:MySQLDataSource" }
+  ],
+  "config_schema": { "type": "object", "properties": { "host": { "type": "string" } } }
+}
+扩展点接口（Python ABC）
+
+python
+class DataSourcePlugin(ABC):
+    @abstractmethod
+    def test_connection(self, config: dict) -> bool: ...
+    @abstractmethod
+    def list_schema(self, config: dict) -> list[TableSchema]: ...
+    @abstractmethod
+    def query(self, config: dict, sql: str) -> QueryResult: ...
+
+class CleaningOperatorPlugin(ABC):
+    @abstractmethod
+    def apply(self, record: dict, params: dict) -> dict | None: ...
+
+class TrainingBackendPlugin(ABC):
+    @abstractmethod
+    def submit(self, job: JobContext) -> str: ...
+    @abstractmethod
+    def status(self, job_id: str) -> JobStatus: ...
+    @abstractmethod
+    def logs(self, job_id: str) -> Iterable[str]: ...
+
+class EvalMetricPlugin(ABC):
+    @abstractmethod
+    def score(self, case: EvalCase, output: str) -> MetricResult: ...
+
+class ReportRendererPlugin(ABC):
+    @abstractmethod
+    def render(self, report: ReportContext) -> str: ...  # 返回 HTML
+首批扩展点： data_source、cleaning_operator、annotation_template、training_backend、eval_metric、report_renderer、command。
+
+权限模型： datasource:connect、network:outbound、fs:read、fs:write、job:submit、training:submit。高风险权限需在启用时二次确认。
+
+隔离： MVP 进程内加载；V2 支持子进程隔离 + 签名校验。
+
+前端协议预留（V2）：
+
+事件总线：插件可 emit(event, payload)，前端订阅渲染。
+
+组件注册：register_component(slot, schema)，前端按 schema 渲染。
+
+MVP 仅定义消息格式，不实现。
+
+SDK 文档： 开放 API 文档 + 示例插件仓库（如 MySQL 连接器、去重算子、BLEU 指标、HTML 报告模板）。
+
+9. 主界面线框图说明
+text
+┌─────────────────────────────────────────────────────────────────────┐
+│ [项目 ▼] [命令面板] [全局搜索]        [运行中 ●] [设置] [账户]      │
+├──────────┬──────────────────────────────────────────┬───────────────┤
+│ 资源树    │  多标签编辑器                             │ 右侧面板       │
+│          │  ┌────────────────────────────────────┐  │               │
+│ ▸ 数据源  │  │ train.py ×  query.sql ×  标注 ×    │  │ 属性/参数表单  │
+│ ▸ 数据集  │  ├────────────────────────────────────┤  │ 标签体系       │
+│ ▸ 清洗    │  │                                    │  │ 指标卡         │
+│ ▸ 标注    │  │   Monaco Editor / 数据表格 /        │  │ 任务详情       │
+│ ▸ 脚本    │  │   标注视图 / 实验详情 / 报告预览     │  │               │
+│ ▸ 训练    │  │                                    │  │               │
+│ ▸ 实验    │  └────────────────────────────────────┘  │               │
+│ ▸ 评测    │                                          │               │
+│ ▸ A/B     │                                          │               │
+│ ▸ 报告    │                                          │               │
+│ ▸ 插件    │                                          │               │
+├──────────┴──────────────────────────────────────────┴───────────────┤
+│ [任务队列] [日志] [终端] [问题] [审计]                               │
+└─────────────────────────────────────────────────────────────────────┘
+关键交互：
+
+资源树双击打开资产到标签页；右键菜单含运行、版本、导出、复制 URI。
+
+命令面板统一入口：新建数据集、运行训练、切换项目、打开报告。
+
+标注视图为独立标签类型：左记录列表、中内容、右标签操作，支持键盘快捷键。
+
+报告预览标签内嵌 HTML 渲染，附导出下拉（HTML/PDF/JSON/MD）。
+
+底部日志面板按 Job 过滤，支持复制、搜索、跟随。
+
+10. 实施路线图
+阶段	内容	里程碑
+P0-a（共享底座）	项目、资源树、多标签、命令面板、Job、日志、审计、设置	可创建多项目并打开编辑器
+P0-b（数据模块）	数据源、SQL 编辑器、数据集版本、收集脚本、清洗 Pipeline、文本标注	数据接入→清洗→标注→导出闭环
+P1（训练模块）	代码工作区、参数 Schema、本地/SSH/Docker Runner、实验追踪、模型登记	提交训练并追踪实验
+P2-a（训后模块）	A/B、能力边界、准确性测试、指标看板、报告全格式导出	评测报告闭环
+P2-b（协作）	用户、角色、项目共享、任务指派、审核流	团队可用
+V2（插件增强）	前端组件协议、子进程隔离、签名、K8s/Slurm 适配器、插件市场	生态开放
+每个阶段交付物： 可运行安装包 + 更新日志 + 数据迁移脚本 + 插件兼容性说明。
+
+11. MVP 验收清单（P0 + P1 核心）
+□ 创建/切换多个独立项目，各自独立 workspace 与元数据库。
+□ 连接现有 SQLite/PostgreSQL/MySQL，浏览 Schema，执行 SQL，结果导入数据集。
+□ 编辑并运行数据收集脚本，产物落盘为数据集版本。
+□ 配置清洗 Pipeline 并复跑，生成新数据集版本。
+□ 创建文本标注任务，完成标注与审核，导出标注结果。
+□ 在应用内编辑训练脚本与 YAML 参数，提交本地或 SSH/Docker 训练。
+□ 查看训练日志、指标、checkpoint，实验关联数据版本与代码版本。
+□ 报告可导出 HTML/PDF/JSON/Markdown，且可追溯到关联版本。
+□ 注册一个 Python 插件（如数据源连接器或评测指标）并在 UI 中配置使用。
+□ 审计事件覆盖项目、数据集、训练、评测、插件启停关键操作。

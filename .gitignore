@@ -1,0 +1,31 @@
+node_modules/
+desktop/dist/
+desktop/release/
+# Packaged binaries are distributed via GitHub Release assets, never committed.
+# A single 128 MB installer / 180 MB electron.exe exceeds GitHub's 100 MB
+# hard limit for tracked files.
+release/
+*.exe
+*.zip
+*.7z
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+sidecar/build/
+sidecar/build-slim/
+sidecar/build-slim-v2/
+sidecar/dist/
+sidecar/dist-slim/
+sidecar/.slimvenv/
+*.spec
+.venv/
+venv/
+*.log
+*.db-wal
+*.db-shm
+.aixian/
+.DS_Store
+# IDE / assistant session data — local only, never publish
+.workbuddy/
+.codebuddy/

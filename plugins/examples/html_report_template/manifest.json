@@ -1,0 +1,12 @@
+{
+  "id": "com.aixian.minimal-report",
+  "name": "极简 HTML 报告模板",
+  "version": "0.1.0",
+  "sdk_version": "0.1",
+  "app_version": ">=0.1.0 <0.2.0",
+  "permissions": [],
+  "extension_points": [
+    { "point": "report_renderer", "impl": "plugin:MinimalHtmlRenderer", "label": "极简报告" }
+  ],
+  "config_schema": { "type": "object", "properties": {} }
+}

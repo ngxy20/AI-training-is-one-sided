@@ -1,0 +1,18 @@
+{
+  "id": "com.aixian.echo-adapter",
+  "name": "规则模型适配器（离线示例）",
+  "version": "0.1.0",
+  "sdk_version": "0.1",
+  "app_version": ">=0.1.0 <0.2.0",
+  "permissions": ["model:invoke"],
+  "extension_points": [
+    { "point": "model_adapter", "impl": "plugin:RuleAdapter", "label": "规则应答（插件）" }
+  ],
+  "config_schema": {
+    "type": "object",
+    "properties": {
+      "rules": { "type": "object", "title": "问答映射" },
+      "prefix": { "type": "string", "title": "输出前缀", "default": "" }
+    }
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "id": "com.aixian.bleu-metric",
+  "name": "BLEU 近似指标",
+  "version": "0.1.0",
+  "sdk_version": "0.1",
+  "app_version": ">=0.1.0 <0.2.0",
+  "permissions": [],
+  "extension_points": [
+    { "point": "eval_metric", "impl": "plugin:BleuMetric", "label": "BLEU（插件）" }
+  ],
+  "config_schema": {
+    "type": "object",
+    "properties": { "threshold": { "type": "number", "title": "通过阈值", "default": 0.5 } }
+  }
+}

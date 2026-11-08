@@ -1,0 +1,155 @@
+"""Step 1: model registry — register a path/endpoint once, reference it everywhere."""
+from __future__ import annotations
+
+import os
+import pathlib
+import sys
+import tempfile
+import time
+
+TMP = pathlib.Path(tempfile.mkdtemp(prefix="aixian-registry-"))
+os.environ["AIXIAN_HOME"] = str(TMP / "home")
+os.environ["AIXIAN_WEB_DIST"] = str(TMP / "no-dist")
+ROOT = pathlib.Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+
+from fastapi.testclient import TestClient  # noqa: E402
+
+from aixian.app import app  # noqa: E402
+
+API = "/api/v1"
+
+
+def wait_job(client: TestClient, job_id: str, timeout: float = 20.0) -> dict:
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        data = client.get(f"{API}/jobs/{job_id}").json()
+        if data.get("status") in ("succeeded", "failed", "cancelled"):
+            return data
+        time.sleep(0.05)
+    raise AssertionError(f"Job {job_id} 超时")
+
+
+def test_model_registry():
+    with TestClient(app) as c:
+        project = c.post(f"{API}/projects", json={"name": "注册表项目"}).json()
+        pid = project["id"]
+
+        # --- catalog for the registration form ---
+        kinds = c.get(f"{API}/projects/{pid}/model-kinds").json()
+        assert "base" in kinds["kinds"] and any(a["type"] == "subprocess" for a in kinds["adapters"])
+
+        # --- "just add a path": a local model folder that does not exist yet is allowed ---
+        weights = TMP / "my_finetune" / "adapter"
+        local = c.post(f"{API}/projects/{pid}/models", json={
+            "name": "我的微调模型", "kind": "finetuned", "adapter_type": "lora",
+            "description": "训练师自己训练并给出路径",
+            "ref_json": {"type": "transformers", "model": str(weights), "max_new_tokens": 64},
+            "tags_json": ["lora", "v1"],
+        }).json()
+        assert local["status"] == "missing" and local["path_status"] == "missing"
+        assert local["warnings"] and "路径暂不存在" in local["warnings"][0]
+        assert local["ref_json"]["model"] == str(weights)
+
+        # --- a callable model registered from an endpoint ---
+        endpoint = c.post(f"{API}/projects/{pid}/models", json={
+            "name": "私有推理服务", "kind": "endpoint",
+            "ref_json": {"type": "openai", "base_url": "http://127.0.0.1:9999/v1", "model": "qwen"},
+        }).json()
+        assert endpoint["status"] == "active"
+        assert endpoint["ref_json"]["base_url"].startswith("http://")
+
+        # --- offline models used to prove model_id drives real inference ---
+        winner = c.post(f"{API}/projects/{pid}/models", json={
+            "name": "离线模型 A", "ref_json": {
+                "type": "static", "outputs": {"c1": "你好", "p1": "你好"}},
+        }).json()
+        loser = c.post(f"{API}/projects/{pid}/models", json={
+            "name": "离线模型 B", "ref_json": {
+                "type": "static", "outputs": {"c1": "错误", "p1": "错误"}},
+        }).json()
+
+        listed = c.get(f"{API}/projects/{pid}/models").json()
+        assert listed["total"] == 4
+        assert listed["items"][0]["usage"]["eval_runs"] == 0
+        assert c.get(f"{API}/projects/{pid}/models", params={"kind": "endpoint"}).json()["total"] == 1
+
+        # --- validation ---
+        assert c.post(f"{API}/projects/{pid}/models", json={
+            "name": "离线模型 A", "ref_json": {"type": "echo"}}).status_code == 409
+        assert c.post(f"{API}/projects/{pid}/models", json={
+            "name": "坏配置", "ref_json": {"type": "not-exist"}}).status_code == 422
+        assert c.post(f"{API}/projects/{pid}/models", json={
+            "name": "缺 URL", "ref_json": {"type": "http"}}).status_code == 422
+        assert c.post(f"{API}/projects/{pid}/models", json={"ref_json": {"type": "echo"}}).status_code == 422
+
+        # --- update creates a new version ---
+        updated = c.put(f"{API}/models/{winner['id']}", json={
+            "description": "第二版", "ref_json": {"type": "static", "outputs": {"c1": "你好呀", "p1": "你好呀"}},
+        }).json()
+        assert updated["version"] == 2 and updated["parent_version_id"] == winner["id"]
+        detail = c.get(f"{API}/models/{winner['id']}").json()
+        assert detail["usage"]["eval_runs"] == 0 and detail["path_status"] == "ok"
+
+        # --- suite + EvalRun by model_id ---
+        suite = c.post(f"{API}/projects/{pid}/eval-suites", json={
+            "name": "注册表评测", "type": "accuracy",
+            "cases_json": [{"id": "c1", "input": "问", "expected": "你好呀"}],
+        }).json()
+        job = c.post(f"{API}/eval-suites/{suite['id']}/runs", json={
+            "model_id": winner["id"], "scorer_json": {"type": "exact_match"}}).json()
+        assert wait_job(c, job["job_id"])["status"] == "succeeded"
+        ev = c.get(f"{API}/eval-runs/{job['eval_run_id']}").json()
+        assert ev["results_json"][0]["output"] == "你好呀"
+        assert ev["metrics_json"]["accuracy"] == 1.0
+        assert ev["model"]["name"] == "离线模型 A"
+        assert c.get(f"{API}/models/{winner['id']}/usage").json()["eval_runs"] == 1
+
+        # --- A/B generated by two registered models ---
+        ab = c.post(f"{API}/projects/{pid}/ab-tests", json={
+            "name": "注册表 A/B", "generate": True,
+            "model_a_id": winner["id"], "model_b_id": loser["id"],
+            "prompt_set_json": [{"id": "p1", "input": "问", "expected": "你好呀"}],
+            "scorer_json": {"type": "exact_match"},
+        }).json()
+        assert wait_job(c, ab["job_id"])["status"] == "succeeded"
+        ab_detail = c.get(f"{API}/ab-tests/{ab['ab_test_id']}").json()
+        assert ab_detail["result_json"]["wins_a"] == 1
+        assert ab_detail["model_a_registry"]["name"] == "离线模型 A"
+
+        # --- tree, search and lineage include models ---
+        tree = c.get(f"{API}/projects/{pid}/tree").json()
+        assert any(g["key"] == "model" and g["count"] == 4 for g in tree["groups"])
+        assert c.get(f"{API}/projects/{pid}/search", params={"q": "离线模型"}).json()["items"]
+        graph = c.get(f"{API}/projects/{pid}/lineage").json()
+        assert any(n["type"] == "model" for n in graph["nodes"])
+        assert any(e["label"] == "评测模型" for e in graph["edges"])
+
+        # --- test endpoint for a registered model ---
+        probe = c.post(f"{API}/models/{winner['id']}/test", json={"prompt": "问"}).json()
+        assert probe["ok"] is True
+
+        # --- training checkpoint auto-registers into the registry ---
+        script = c.post(f"{API}/projects/{pid}/scripts", json={"name": "训练脚本"}).json()
+        config = c.post(f"{API}/projects/{pid}/configs", json={
+            "name": "配置", "script_id": script["id"], "params": {"epochs": 1}}).json()
+        dataset = c.post(f"{API}/projects/{pid}/datasets", json={"name": "训练集"}).json()
+        version = c.post(f"{API}/datasets/{dataset['id']}/versions", json={
+            "records": [{"text": "样本"}]}).json()
+        run = c.post(f"{API}/projects/{pid}/runs", json={
+            "name": "实验 1", "config_id": config["id"],
+            "dataset_version_ids": [version["id"]]}).json()
+        assert wait_job(c, run["job_id"])["status"] == "succeeded"
+        registered = c.post(f"{API}/runs/{run['run_id']}/register-model", json={"name": "实验1-产物"}).json()
+        assert registered["registry_model"]["kind"] == "finetuned"
+        assert registered["registry_model"]["source_run_id"] == run["run_id"]
+        assert c.get(f"{API}/projects/{pid}/models").json()["total"] == 5
+
+        # --- archive hides the model and blocks new references ---
+        assert c.delete(f"{API}/models/{loser['id']}").status_code == 200
+        assert c.get(f"{API}/projects/{pid}/models").json()["total"] == 4
+        assert c.get(f"{API}/projects/{pid}/models", params={"status": "archived"}).json()["total"] == 1
+        assert c.post(f"{API}/eval-suites/{suite['id']}/runs", json={
+            "model_id": loser["id"]}).status_code == 409
+        assert c.post(f"{API}/eval-suites/{suite['id']}/runs", json={
+            "model_id": "not-exist"}).status_code == 404

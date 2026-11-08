@@ -1,0 +1,22 @@
+{
+  "id": "com.example.mysql-connector",
+  "name": "MySQL Connector",
+  "version": "0.1.0",
+  "sdk_version": "0.1",
+  "app_version": ">=0.1.0 <0.2.0",
+  "permissions": ["datasource:connect", "network:outbound"],
+  "extension_points": [
+    { "point": "data_source", "impl": "plugin:MySQLDataSource", "label": "MySQL 数据源" }
+  ],
+  "config_schema": {
+    "type": "object",
+    "properties": {
+      "host": { "type": "string", "default": "127.0.0.1" },
+      "port": { "type": "integer", "default": 3306 },
+      "user": { "type": "string" },
+      "password": { "type": "string" },
+      "database": { "type": "string" }
+    },
+    "required": ["host", "database"]
+  }
+}

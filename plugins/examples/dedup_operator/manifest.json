@@ -1,0 +1,18 @@
+{
+  "id": "com.aixian.dedup-operator",
+  "name": "字段去重算子",
+  "version": "0.1.0",
+  "sdk_version": "0.1",
+  "app_version": ">=0.1.0 <0.2.0",
+  "permissions": ["fs:read"],
+  "extension_points": [
+    { "point": "cleaning_operator", "impl": "plugin:DedupOperator", "label": "字段去重（插件）" }
+  ],
+  "config_schema": {
+    "type": "object",
+    "properties": {
+      "field": { "type": "string", "title": "去重字段", "default": "text" },
+      "case_sensitive": { "type": "boolean", "title": "区分大小写", "default": false }
+    }
+  }
+}

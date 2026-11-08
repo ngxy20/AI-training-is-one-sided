@@ -1,0 +1,51 @@
+{
+  "name": "ai-training-studio-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AI 训练工作台 · Windows 桌面端（Electron + React + TypeScript + Monaco）",
+  "main": "electron/main.cjs",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit",
+    "app": "electron .",
+    "app:dev": "cross-env AIXIAN_DEV=1 electron .",
+    "dist": "electron-builder --win"
+  },
+  "dependencies": {
+    "@monaco-editor/react": "^4.6.0",
+    "monaco-editor": "^0.52.2",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "cross-env": "^7.0.3",
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.5"
+  },
+  "build": {
+    "appId": "com.aixian.training-studio",
+    "productName": "AI 训练工作台",
+    "directories": { "output": "release" },
+    "files": ["electron/**/*", "package.json"],
+    "extraResources": [
+      { "from": "dist", "to": "web", "filter": ["**/*"] },
+      { "from": "../sidecar/dist-slim/aixian-sidecar", "to": "sidecar", "filter": ["**/*"] },
+      { "from": "../sidecar/aixian", "to": "sidecar/aixian", "filter": ["**/*", "!**/__pycache__/**", "!*.pyc"] },
+      { "from": "../plugins", "to": "plugins", "filter": ["**/*", "!**/__pycache__/**"] },
+      { "from": "../LICENSE", "to": "LICENSE" },
+      { "from": "../NOTICE.md", "to": "NOTICE.md" },
+      { "from": "../THIRD-PARTY-NOTICES.md", "to": "THIRD-PARTY-NOTICES.md" }
+    ],
+    "win": {
+      "target": ["portable"],
+      "signAndEditExecutable": false,
+      "artifactName": "AI-Training-Studio-${version}-Setup.${ext}"
+    }
+  }
+}

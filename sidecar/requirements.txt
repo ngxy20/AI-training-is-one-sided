@@ -1,0 +1,19 @@
+# AI Training Studio - Python Sidecar
+fastapi>=0.110,<1
+uvicorn[standard]>=0.27
+SQLAlchemy>=2.0,<3
+pydantic>=2.5,<3
+PyYAML>=6
+python-multipart>=0.0.9
+Jinja2>=3.1
+cryptography>=41
+httpx>=0.26
+paramiko>=3.4
+docker>=7.0
+pyarrow>=15
+reportlab>=4.0
+psycopg2-binary>=2.9
+pymysql>=1.1
+
+# dev / test
+pytest>=8
