@@ -6,6 +6,8 @@
 
 当前版本 **v0.1 · MIT 开源**。可自由使用、修改、再分发与商用，唯一条件是保留版权与许可声明（见 `LICENSE`）。发布与安全说明见 `NOTICE.md`。
 
+**仓库** · https://github.com/ngxy20/AI-training-is-one-sided 　|　 **下载** · https://github.com/ngxy20/AI-training-is-one-sided/releases 　|　 **反馈** · https://github.com/ngxy20/AI-training-is-one-sided/issues
+
 ---
 
 ## 1. 它是干什么的
@@ -265,7 +267,7 @@ Sidecar 下挂项目级 SQLite、workspace 资产目录、Job Runner（local/SSH
 只需在副本中保留版权与许可声明。第三方组件许可见 `THIRD-PARTY-NOTICES.md`。
 发布 fork 请更换名称与图标，避免让人误以为是官方版本。
 
-欢迎 Issue 与 Pull Request：
+欢迎在 [Issues](https://github.com/ngxy20/AI-training-is-one-sided/issues) 与 [Pull Requests](https://github.com/ngxy20/AI-training-is-one-sided/pulls) 中参与：
 
 - 反馈优先回答三个问题：**跑通了吗 / 卡在哪一步 / 会不会用自己的真实模型再跑一次**；
 - 提交 PR 前请跑 `cd sidecar && python -m pytest -q` 与 `cd desktop && npm run typecheck && npm run build`；
